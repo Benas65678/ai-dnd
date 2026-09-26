@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Dungeon Master</title>
+<link rel="stylesheet" href="style.css?v=5">
+</head>
+<body>
+
+  <div id="setup-screen" class="screen">
+    <div class="card">
+      <h1>🎲 AI Dungeon Master</h1>
+      <p class="subtitle">A multiplayer text adventure. The AI generates a new world, map, and enemies every time — invite friends to join your game with a room code.</p>
+
+      <div class="lobby-section">
+        <h2>Host a New Adventure</h2>
+        <label for="host-name">Your name</label>
+        <input id="host-name" type="text" placeholder="e.g. Rocky" maxlength="24" />
+
+        <label for="rules">Custom rules (optional)</label>
+        <textarea id="rules" placeholder="e.g. Critical hits deal triple damage. Magic costs HP instead of mana."></textarea>
+
+        <button id="host-btn">Host New Adventure</button>
+      </div>
+
+      <div class="lobby-section">
+        <h2>Join an Existing Game</h2>
+        <label for="join-name">Your name</label>
+        <input id="join-name" type="text" placeholder="e.g. Rocky" maxlength="24" />
+
+        <label for="join-code">Room code</label>
+        <input id="join-code" type="text" placeholder="e.g. K7F3X" maxlength="8" style="text-transform:uppercase" />
+
+        <button id="join-btn">Join Game</button>
+      </div>
+
+      <div id="lobby-error" class="lobby-error hidden"></div>
+
+      <div id="recent-section">
+        <h2>Recently Played</h2>
+        <div id="recent-list"><p id="recent-empty">No saved adventures yet.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="game-screen" class="screen hidden">
+
+    <div id="left-panel">
+      <div id="room-bar">
+        <span id="room-code-label"></span>
+        <span id="players-online"></span>
+      </div>
+
+      <form id="chat-form">
+        <input id="chat-input" type="text" placeholder="What do you do?" autocomplete="off" />
+        <button type="submit">Send</button>
+      </form>
+      <div id="chat-log"></div>
+    </div>
+
+    <div id="right-panel">
+      <div id="map-frame">
+        <div id="map-area" data-palette="generic">
+          <div id="map-decor"></div>
+          <div id="map-grid-overlay"></div>
+          <div id="map-vignette"></div>
+          <div id="env-label">Unknown location</div>
+          <div id="object-row"></div>
+          <div id="enemy-row"></div>
+          <div id="player-row"></div>
+          <div id="effect-layer"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="dice-overlay" class="hidden">
+      <div class="dice-box">
+        <div id="dice-face">?</div>
+        <div id="dice-reason"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js?v=5"></script>
+</body>
+</html>
