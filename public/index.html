@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI Dungeon Master</title>
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
 
@@ -59,7 +59,10 @@
         <button type="submit">Send</button>
       </form>
       <div id="chat-log"></div>
-      <div id="inventory-panel"></div>
+      <div id="inventory-section">
+        <div id="inventory-label">🎒 Party Inventory</div>
+        <div id="inventory-panel"></div>
+      </div>
     </div>
 
     <div id="right-panel">
@@ -87,6 +90,6 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="app.js?v=7"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>
