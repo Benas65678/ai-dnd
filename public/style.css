@@ -133,6 +133,24 @@ input[type="text"] {
 #players-online { color: #8fb3a8; }
 
 #chat-form { display: flex; gap: 10px; }
+
+/* ---------- Turn order banner ---------- */
+#turn-banner {
+  background: rgba(212,175,106,0.12);
+  border: 1px solid #a8763e;
+  color: #d4af6a;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+/* ---------- Inventory panel ---------- */
+#inventory-panel { display: flex; flex-direction: column; gap: 6px; max-height: 140px; overflow-y: auto; }
+.inventory-row { display: flex; align-items: baseline; gap: 8px; font-size: 0.8rem; flex-wrap: wrap; }
+.inventory-owner { color: #d4af6a; font-weight: bold; white-space: nowrap; }
+.inventory-items { color: #b3a281; }
+.inventory-items .empty { color: #6b5d45; font-style: italic; }
 #chat-input {
   flex: 1;
   padding: 12px;
@@ -159,6 +177,25 @@ input[type="text"] {
 .msg.player { color: #8fb3a8; text-align: right; font-style: italic; }
 .msg.system { color: #8a7a5c; text-align: center; font-size: 0.85rem; }
 .msg .player-name { font-weight: bold; font-style: normal; color: #c7a879; }
+
+.msg.error {
+  color: #e8a89e;
+  text-align: center;
+  font-size: 0.85rem;
+  background: rgba(199,74,58,0.12);
+  border: 1px solid #c74a3a;
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+.retry-btn {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  background: #c74a3a;
+  color: #fff;
+}
+.retry-btn:hover { background: #d95f4e; }
 
 /* ---------- Right panel: the map ---------- */
 #right-panel { flex: 1; display: flex; }
@@ -352,6 +389,15 @@ input[type="text"] {
 }
 .token.enemy .token-icon { border-color: #c74a3a; }
 .token.player .token-icon { border-color: #6fae5a; }
+
+.token.current-turn .token-icon {
+  box-shadow: 0 0 0 3px rgba(212,175,106,0.9), 0 0 16px rgba(212,175,106,0.7);
+  animation: turn-pulse 1.4s ease-in-out infinite;
+}
+@keyframes turn-pulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.25); }
+}
 
 /* ---------- Object tokens (walls, fire, traps, etc.) ---------- */
 .object-token {

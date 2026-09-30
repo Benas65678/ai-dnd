@@ -16,7 +16,7 @@ const io = new Server(httpServer, { cors: { origin: '*' } });
 
 const PORT = process.env.PORT || 3000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 if (!GEMINI_API_KEY || GEMINI_API_KEY === 'your_key_here') {
@@ -140,22 +140,25 @@ CRITICAL FORMAT REQUIREMENT — every single response you give MUST end with a m
 
 <<<SCENE>>>
 {
-  "players": [{"name": "string", "hp": number, "maxHp": number, "icon": "single emoji representing this adventurer", "distance": "far, near, or melee"}],
+  "players": [{"name": "string", "hp": number, "maxHp": number, "icon": "single emoji representing this adventurer", "distance": "far, near, or melee", "inventory": [{"icon": "single emoji", "name": "string", "qty": number}]}],
   "enemies": [{"name": "string", "hp": number, "maxHp": number, "icon": "single emoji representing this enemy", "status": "alive or defeated", "distance": "far, near, or melee"}],
   "objects": [{"icon": "single emoji for a temporary object/obstacle/effect in the scene, e.g. a wall, fire, trap, barricade", "label": "short name, 1-4 words", "distance": "far, near, or melee"}],
   "effect": null,
   "environment": {"description": "short phrase, 3-6 words, describing the current location", "palette": "one of: swamp, dungeon, forest, cave, ruins, snow, desert, city, ship, generic"},
-  "diceRoll": null
+  "diceRoll": null,
+  "turnOrder": null
 }
 <<<END_SCENE>>>
 
 Rules for the scene block:
-- "players" has ONE entry per adventurer currently in the party, matched by the character name they've established (not their chat display name). Add an entry the moment someone introduces a character; before that, use a placeholder entry like {"name": "Adventurer", "hp": 10, "maxHp": 10, "icon": "🧑", "distance": "far"}. Keep every existing party member's entry updated every turn even if only one of them acted.
+- "players" has ONE entry per adventurer currently in the party, matched by the character name they've established (not their chat display name). Add an entry the moment someone introduces a character; before that, use a placeholder entry like {"name": "Adventurer", "hp": 10, "maxHp": 10, "icon": "🧑", "distance": "far", "inventory": []}. Keep every existing party member's entry updated every turn even if only one of them acted.
+- "inventory" (on each player) lists what that character is currently carrying — weapons, gear, consumables, quest items, currency. Start new characters with a small sensible kit appropriate to how they introduced themselves. Update it as items are picked up, used, given away, or run out (remove/decrement rather than leaving stale entries). Keep it to items worth tracking narratively; don't invent excessive detail.
 - "enemies" is an empty array [] when there are no enemies currently present.
-- "distance" (on each player AND separately on each individual enemy) reflects physical closeness to the fight: "far" (across the room/area), "near" (closing in, a few steps away), or "melee" (right next to each other, weapons' reach). Each entity tracks its OWN distance independently. Default new enemies/players to "far" unless narration says otherwise. Update distance every turn to reflect movement described that turn (charging/approaching closes it, retreating opens it). When no enemies are present, distance is just "far" for everyone.
+- "distance" (on each player AND separately on each individual enemy) reflects physical closeness to whatever the party is currently approaching or interacting with — this applies just as much outside combat as in it: a door, a locked chest, an NPC, an altar, anything the party is walking up to. Values: "far" (across the room/area), "near" (closing in, a few steps away), or "melee" (right next to it, within arm's reach). Each entity tracks its OWN distance independently. Update distance every turn to reflect movement described that turn — if a character walks toward, approaches, or arrives at something, move their distance closer that same turn (far→near→melee); moving away opens it back up. Don't leave this frozen at "far" just because there's no combat — a character standing right at a door should be "melee", not "far". When there is truly nothing nearby to be close to yet (the scene just started, nothing has been approached), "far" is correct.
 - "objects" is for anything semi-permanent added to the scene that isn't a character — a wall thrown up, a fire spreading, a trap set, rubble, a barricade. Give it a "distance" the same way as characters. Keep an object in the array every turn while it still exists, and drop it once destroyed or no longer relevant.
 - "effect" is a one-time visual flourish for the CURRENT turn only — use it whenever an action just visibly resolved (a hit connects, a spell fires, an object is created/destroyed). Format: {"icon": "single emoji, e.g. 👊 for a landed punch, 🔥 for fire magic, ⚔️ for a clash", "label": "very short phrase, e.g. 'Fist connects!'"}. Set it to null on quieter turns.
 - Set "diceRoll" to an object like {"die": "d20", "reason": "short phrase, e.g. attack roll against the goblin"} ONLY on the turn where you are asking for a roll. Otherwise it must be null.
+- "turnOrder" tracks initiative ONLY while enemies are actively present and in a fight. The moment combat starts (enemies first appear and are hostile), decide a sensible initiative order mixing every player and enemy name, and set {"order": ["Name1","Name2",...], "current": "Name1"}. After each combatant's action resolves, advance "current" to the next name in "order" (wrapping back to the start after the last). Remove a combatant from "order" when defeated or when they flee, keeping the rest of the sequence intact. Set "turnOrder" back to null once combat fully ends (all enemies defeated, fled, or the encounter otherwise resolves). Gently keep players roughly to their own turn in the narration (e.g. if someone acts out of order, you can let it stand as a reflexive/prepared action, but nudge play back toward the order) rather than rigidly blocking anyone.
 - Never put narration inside the scene block, and never omit it. Keep icons to a single emoji each.
 
 Begin by introducing the world and the party's starting situation, and ask whoever has joined so far to describe their character if that hasn't been established yet.`;
@@ -175,12 +178,10 @@ function extractScene(rawText) {
   return { narrative, scene };
 }
 
-// Runs one turn of the conversation: sends `message` to Gemini using the room's
-// running history, broadcasts the result to everyone in the room, and - if the
-// DM calls for a dice roll - rolls it, broadcasts that too, then automatically
-// continues the conversation with the result (recursively, in case that leads
-// to another roll).
-async function advanceTurn(roomCode, message, { visible = true, playerName = null } = {}) {
+// Records a message into the room's history/log and broadcasts it, WITHOUT
+// calling Gemini. Kept separate from requestDmTurn so a failed API call can be
+// retried without re-logging (and duplicating) the player's message.
+function recordMessage(roomCode, message, { visible = true, playerName = null } = {}) {
   const session = sessions[roomCode];
   if (!session) return;
 
@@ -190,11 +191,21 @@ async function advanceTurn(roomCode, message, { visible = true, playerName = nul
   }
 
   session.history.push({ role: 'user', parts: [{ text: playerName ? `[${playerName}] ${message}` : message }] });
+}
+
+// Calls Gemini using the room's current history, broadcasts the result, and -
+// if the DM calls for a dice roll - rolls it, broadcasts that too, then
+// automatically records+requests again with the result (recursively, in case
+// that leads to another roll). Safe to call again after a failure (retry)
+// since it doesn't touch history/displayLog itself on the way in.
+async function requestDmTurn(roomCode) {
+  const session = sessions[roomCode];
+  if (!session) return;
 
   const body = {
     system_instruction: { parts: [{ text: session.systemInstruction }] },
     contents: session.history,
-    generationConfig: { temperature: 1.0, maxOutputTokens: 1500 }
+    generationConfig: { temperature: 1.0, maxOutputTokens: 1800 }
   };
 
   const MAX_RETRIES = 3;
@@ -231,9 +242,9 @@ async function advanceTurn(roomCode, message, { visible = true, playerName = nul
     console.error(logLine);
     fs.appendFileSync(path.join(__dirname, 'gemini-error.log'), logLine);
     const friendlyMsg = status === 503
-      ? 'The DM (Gemini) is overloaded right now even after retrying. Please wait a bit and try sending a message again.'
+      ? 'The DM (Gemini) is overloaded right now even after retrying.'
       : `Gemini API error (${status}). Check the server's API key and model name in .env. Full details were written to gemini-error.log`;
-    io.to(roomCode).emit('system-message', { text: `⚠️ ${friendlyMsg}` });
+    io.to(roomCode).emit('error-message', { text: friendlyMsg, canRetry: true });
     return;
   }
 
@@ -262,7 +273,8 @@ async function advanceTurn(roomCode, message, { visible = true, playerName = nul
     await saveSession(roomCode);
     io.to(roomCode).emit('system-message', { text: sysText });
 
-    await advanceTurn(roomCode, `(Dice result: I rolled a ${result} on a ${die || 'd20'} for: ${reason || 'the requested roll'}.)`, { visible: false });
+    recordMessage(roomCode, `(Dice result: I rolled a ${result} on a ${die || 'd20'} for: ${reason || 'the requested roll'}.)`, { visible: false });
+    await requestDmTurn(roomCode);
   }
 }
 
@@ -327,11 +339,10 @@ io.on('connection', socket => {
     if (!session.started) {
       session.started = true;
       saveSession(code);
-      live.chain = live.chain.then(() => advanceTurn(
-        code,
-        "(The adventure begins. Introduce the world and the party's starting situation, and ask whoever has joined so far to describe their character.)",
-        { visible: false }
-      )).catch(err => console.error('Error starting adventure:', err));
+      live.chain = live.chain.then(() => {
+        recordMessage(code, "(The adventure begins. Introduce the world and the party's starting situation, and ask whoever has joined so far to describe their character.)", { visible: false });
+        return requestDmTurn(code);
+      }).catch(err => console.error('Error starting adventure:', err));
     }
   });
 
@@ -342,10 +353,28 @@ io.on('connection', socket => {
 
     const live = getOrCreateLiveRoom(roomCode);
     live.chain = live.chain
-      .then(() => advanceTurn(roomCode, message.trim(), { visible: true, playerName }))
+      .then(() => {
+        recordMessage(roomCode, message.trim(), { visible: true, playerName });
+        return requestDmTurn(roomCode);
+      })
       .catch(err => {
         console.error('Error advancing turn:', err);
-        io.to(roomCode).emit('system-message', { text: '⚠️ Something went wrong reaching the DM. Try again.' });
+        io.to(roomCode).emit('error-message', { text: 'Something went wrong reaching the DM.', canRetry: true });
+      });
+  });
+
+  // Retries the last DM call without re-recording the player's message (which
+  // is already in history) - used by the "Retry" button after a failure.
+  socket.on('retry-turn', () => {
+    const { roomCode } = socket.data || {};
+    if (!roomCode || !sessions[roomCode]) return;
+
+    const live = getOrCreateLiveRoom(roomCode);
+    live.chain = live.chain
+      .then(() => requestDmTurn(roomCode))
+      .catch(err => {
+        console.error('Error retrying turn:', err);
+        io.to(roomCode).emit('error-message', { text: 'Something went wrong reaching the DM.', canRetry: true });
       });
   });
 

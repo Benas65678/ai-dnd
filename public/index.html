@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI Dungeon Master</title>
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
 
@@ -52,11 +52,14 @@
         <span id="players-online"></span>
       </div>
 
+      <div id="turn-banner" class="hidden"></div>
+
       <form id="chat-form">
         <input id="chat-input" type="text" placeholder="What do you do?" autocomplete="off" />
         <button type="submit">Send</button>
       </form>
       <div id="chat-log"></div>
+      <div id="inventory-panel"></div>
     </div>
 
     <div id="right-panel">
@@ -84,6 +87,6 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="app.js?v=5"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

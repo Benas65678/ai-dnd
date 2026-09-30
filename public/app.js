@@ -14,10 +14,13 @@ const recentList = document.getElementById('recent-list');
 
 const roomCodeLabel = document.getElementById('room-code-label');
 const playersOnlineLabel = document.getElementById('players-online');
+const turnBanner = document.getElementById('turn-banner');
+const inventoryPanel = document.getElementById('inventory-panel');
 
 const chatLog = document.getElementById('chat-log');
 const chatForm = document.getElementById('chat-form');
 const chatInput = document.getElementById('chat-input');
+const chatSendBtn = chatForm.querySelector('button');
 
 const mapArea = document.getElementById('map-area');
 const mapDecor = document.getElementById('map-decor');
@@ -187,8 +190,15 @@ chatForm.addEventListener('submit', e => {
   const text = chatInput.value.trim();
   if (!text || !myRoomCode) return;
   chatInput.value = '';
+  setSending(true);
   socket.emit('send-message', text);
 });
+
+function setSending(isSending) {
+  chatInput.disabled = isSending;
+  chatSendBtn.disabled = isSending;
+  chatSendBtn.textContent = isSending ? 'Sending...' : 'Send';
+}
 
 socket.on('player-message', ({ playerName, message }) => {
   addMessage(message, 'player', playerName);
@@ -198,7 +208,30 @@ socket.on('system-message', ({ text }) => {
   addMessage(text, 'system');
 });
 
+socket.on('error-message', ({ text, canRetry }) => {
+  setSending(false);
+  const div = document.createElement('div');
+  div.className = 'msg error';
+  div.textContent = `⚠️ ${text}`;
+  if (canRetry) {
+    const retryBtn = document.createElement('button');
+    retryBtn.className = 'retry-btn';
+    retryBtn.textContent = 'Retry';
+    retryBtn.addEventListener('click', () => {
+      retryBtn.disabled = true;
+      retryBtn.textContent = 'Retrying...';
+      setSending(true);
+      socket.emit('retry-turn');
+    });
+    div.appendChild(document.createElement('br'));
+    div.appendChild(retryBtn);
+  }
+  chatLog.appendChild(div);
+  chatLog.scrollTop = chatLog.scrollHeight;
+});
+
 socket.on('dm-reply', ({ reply, scene }) => {
+  setSending(false);
   addMessage(reply, 'dm');
   renderScene(scene);
 });
@@ -215,9 +248,9 @@ function hpFillClass(hp, maxHp) {
   return '';
 }
 
-function makeToken(entity, kind) {
+function makeToken(entity, kind, isCurrentTurn) {
   const wrap = document.createElement('div');
-  wrap.className = `token ${kind}` + (entity.status === 'defeated' ? ' defeated' : '');
+  wrap.className = `token ${kind}` + (entity.status === 'defeated' ? ' defeated' : '') + (isCurrentTurn ? ' current-turn' : '');
 
   const name = document.createElement('div');
   name.className = 'token-name';
@@ -303,11 +336,13 @@ function renderScene(scene) {
     mapDecor.appendChild(span);
   });
 
+  const currentTurnName = scene.turnOrder?.current || null;
+
   // Enemies: each gets its own vertical position based on its own distance, spread horizontally
   enemyRow.innerHTML = '';
   const enemies = scene.enemies || [];
   enemies.forEach((enemy, i) => {
-    const token = makeToken(enemy, 'enemy');
+    const token = makeToken(enemy, 'enemy', enemy.name === currentTurnName);
     token.style.top = DISTANCE_TO_TOP[enemy.distance] || DISTANCE_TO_TOP.far;
     token.style.left = spreadLeft(i, enemies.length);
     enemyRow.appendChild(token);
@@ -327,11 +362,42 @@ function renderScene(scene) {
   playerRow.innerHTML = '';
   const players = scene.players || (scene.player ? [scene.player] : []);
   players.forEach((p, i) => {
-    const token = makeToken(p, 'player');
-    const distance = enemies.length > 0 ? (p.distance || 'far') : 'far';
+    const token = makeToken(p, 'player', p.name === currentTurnName);
+    const distance = p.distance || 'far';
     token.style.bottom = DISTANCE_TO_BOTTOM[distance] || DISTANCE_TO_BOTTOM.far;
     token.style.left = spreadLeft(i, players.length);
     playerRow.appendChild(token);
+  });
+
+  // Turn order banner
+  if (scene.turnOrder && scene.turnOrder.current) {
+    turnBanner.textContent = `⚔️ ${scene.turnOrder.current}'s turn`;
+    turnBanner.classList.remove('hidden');
+  } else {
+    turnBanner.classList.add('hidden');
+  }
+
+  // Inventory panel - shared visibility across the whole party, like normal D&D table knowledge
+  inventoryPanel.innerHTML = '';
+  players.forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'inventory-row';
+    const owner = document.createElement('span');
+    owner.className = 'inventory-owner';
+    owner.textContent = `${p.name || 'Adventurer'}:`;
+    row.appendChild(owner);
+    const items = document.createElement('span');
+    items.className = 'inventory-items';
+    if (p.inventory && p.inventory.length) {
+      items.textContent = p.inventory.map(it => `${it.icon || '📦'} ${it.name}${it.qty > 1 ? ` x${it.qty}` : ''}`).join('  ');
+    } else {
+      const empty = document.createElement('span');
+      empty.className = 'empty';
+      empty.textContent = 'nothing yet';
+      items.appendChild(empty);
+    }
+    row.appendChild(items);
+    inventoryPanel.appendChild(row);
   });
 
   // One-shot action flash
